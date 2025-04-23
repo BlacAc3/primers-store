@@ -16,6 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.http import JsonResponse
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from rest_framework import permissions
@@ -32,7 +33,11 @@ schema_view = get_schema_view(
     permission_classes=(permissions.AllowAny,),
 )
 
+def health_check(request):
+    return JsonResponse({"status": "ok", "message": "Service is running"})
+
 urlpatterns = [
+    path('', health_check, name='health_check'),
     path('admin/', admin.site.urls),
     path('api/', include('store.urls')),  # Include your app's routes
     path('swagger<format>/', schema_view.without_ui(cache_timeout=0), name='schema-json'),
