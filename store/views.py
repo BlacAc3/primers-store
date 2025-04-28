@@ -40,9 +40,15 @@ class RegisterView(generics.CreateAPIView):
 
     @swagger_auto_schema(
         operation_description="Register a new user",
+        request_body=RegisterSerializer,
         responses={
-            201: RegisterSerializer,
-            400: "Bad request - user already exists"
+            201: openapi.Response('Created', RegisterSerializer),
+            400: openapi.Response('Bad Request', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
         }
     )
     def post(self, request, *args, **kwargs):
@@ -82,7 +88,18 @@ class LoginView(generics.GenericAPIView):
 
     @swagger_auto_schema(
         operation_description="Login and obtain JWT token",
-        responses={200: openapi.Response('Login successful', LoginSerializer)}
+        request_body=LoginSerializer,
+        responses={
+            200: openapi.Response('Login successful', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'refresh': openapi.Schema(type=openapi.TYPE_STRING),
+                    'access': openapi.Schema(type=openapi.TYPE_STRING),
+                    'user': openapi.Schema(type=openapi.TYPE_OBJECT)
+                }
+            )),
+            400: "Bad request - invalid credentials"
+        }
     )
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -95,7 +112,11 @@ class LogoutView(generics.GenericAPIView):
 
     @swagger_auto_schema(
         operation_description="Logout and invalidate JWT token",
-        responses={204: "No content"}
+        request_body=LogoutSerializer,
+        responses={
+            204: "No content - logout successful",
+            400: "Bad request - invalid token"
+        }
     )
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -109,7 +130,10 @@ class MeView(generics.RetrieveAPIView):
 
     @swagger_auto_schema(
         operation_description="Get current user details",
-        responses={200: UserSerializer}
+        responses={
+            200: UserSerializer,
+            401: "Unauthorized - not authenticated"
+        }
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
@@ -122,7 +146,22 @@ class RefreshTokenView(TokenRefreshView):
 
     @swagger_auto_schema(
         operation_description="Refresh JWT token",
-        responses={200: "New token pair"}
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['refresh'],
+            properties={
+                'refresh': openapi.Schema(type=openapi.TYPE_STRING)
+            }
+        ),
+        responses={
+            200: openapi.Response('New token pair', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'access': openapi.Schema(type=openapi.TYPE_STRING),
+                }
+            )),
+            401: "Unauthorized - invalid refresh token"
+        }
     )
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
@@ -133,9 +172,13 @@ class PasswordResetView(generics.GenericAPIView):
 
     @swagger_auto_schema(
         operation_description="Request password reset email",
-        responses={200: openapi.Response('Email sent if account exists',
+        request_body=PasswordResetSerializer,
+        responses={
+            200: openapi.Response('Email sent if account exists',
                     schema=openapi.Schema(type=openapi.TYPE_OBJECT,
-                    properties={'detail': openapi.Schema(type=openapi.TYPE_STRING)}))}
+                    properties={'detail': openapi.Schema(type=openapi.TYPE_STRING)})),
+            400: "Bad request - invalid email format"
+        }
     )
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -151,11 +194,12 @@ class PasswordResetConfirmView(generics.GenericAPIView):
 
     @swagger_auto_schema(
         operation_description="Confirm password reset with token",
+        request_body=PasswordResetConfirmSerializer,
         responses={
             200: openapi.Response('Password reset successful',
                     schema=openapi.Schema(type=openapi.TYPE_OBJECT,
                     properties={'detail': openapi.Schema(type=openapi.TYPE_STRING)})),
-            400: openapi.Response('Invalid token',
+            400: openapi.Response('Invalid token or password',
                     schema=openapi.Schema(type=openapi.TYPE_OBJECT,
                     properties={'error': openapi.Schema(type=openapi.TYPE_STRING)}))
         }
@@ -179,7 +223,11 @@ class VendorRegistrationView(generics.CreateAPIView):
 
     @swagger_auto_schema(
         operation_description="Submit vendor registration request",
-        responses={201: VendorRegistrationSerializer}
+        request_body=VendorRegistrationSerializer,
+        responses={
+            201: VendorRegistrationSerializer,
+            400: "Bad request - invalid data"
+        }
     )
     def post(self, request, *args, **kwargs):
         response = super().post(request, *args, **kwargs)
@@ -209,7 +257,12 @@ class VendorListView(generics.ListAPIView):
             openapi.Parameter('status', openapi.IN_QUERY, description="Filter by vendor status",
                              type=openapi.TYPE_STRING,
                              enum=[status[0] for status in Vendor.STATUS_CHOICES])
-        ]
+        ],
+        responses={
+            200: openapi.Response('List of vendors', VendorSerializer(many=True)),
+            401: "Unauthorized",
+            403: "Forbidden - not an admin"
+        }
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
@@ -229,7 +282,13 @@ class VendorDetailView(generics.RetrieveAPIView):
     lookup_url_kwarg = 'vendor_id'
 
     @swagger_auto_schema(
-        operation_description="Get vendor details"
+        operation_description="Get vendor details",
+        responses={
+            200: VendorSerializer,
+            401: "Unauthorized",
+            403: "Forbidden - not an admin",
+            404: "Vendor not found"
+        }
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
@@ -242,7 +301,14 @@ class VendorApproveView(generics.UpdateAPIView):
     lookup_url_kwarg = 'vendor_id'
 
     @swagger_auto_schema(
-        operation_description="Approve vendor"
+        operation_description="Approve vendor",
+        request_body=openapi.Schema(type=openapi.TYPE_OBJECT, properties={}),
+        responses={
+            200: VendorSerializer,
+            401: "Unauthorized",
+            403: "Forbidden - not an admin",
+            404: "Vendor not found"
+        }
     )
     def put(self, request, *args, **kwargs):
         vendor = self.get_object()
@@ -268,7 +334,15 @@ class VendorRejectView(generics.UpdateAPIView):
     lookup_url_kwarg = 'vendor_id'
 
     @swagger_auto_schema(
-        operation_description="Reject vendor"
+        operation_description="Reject vendor",
+        request_body=VendorRejectSerializer,
+        responses={
+            200: VendorSerializer,
+            400: "Bad request - missing rejection reason",
+            401: "Unauthorized",
+            403: "Forbidden - not an admin",
+            404: "Vendor not found"
+        }
     )
     def put(self, request, *args, **kwargs):
         vendor = self.get_object()
@@ -295,7 +369,15 @@ class VendorSuspendView(generics.UpdateAPIView):
     lookup_url_kwarg = 'vendor_id'
 
     @swagger_auto_schema(
-        operation_description="Suspend vendor"
+        operation_description="Suspend vendor",
+        request_body=VendorSuspendSerializer,
+        responses={
+            200: VendorSerializer,
+            400: "Bad request - missing suspension reason",
+            401: "Unauthorized",
+            403: "Forbidden - not an admin",
+            404: "Vendor not found"
+        }
     )
     def put(self, request, *args, **kwargs):
         vendor = self.get_object()
@@ -322,7 +404,15 @@ class VendorBanView(generics.UpdateAPIView):
     lookup_url_kwarg = 'vendor_id'
 
     @swagger_auto_schema(
-        operation_description="Ban vendor"
+        operation_description="Ban vendor",
+        request_body=VendorBanSerializer,
+        responses={
+            200: VendorSerializer,
+            400: "Bad request - missing ban reason",
+            401: "Unauthorized",
+            403: "Forbidden - not an admin",
+            404: "Vendor not found"
+        }
     )
     def put(self, request, *args, **kwargs):
         vendor = self.get_object()
@@ -344,6 +434,8 @@ class VendorBanView(generics.UpdateAPIView):
 
 class VendorDeleteView(generics.DestroyAPIView):
     permission_classes = [IsAdmin]
+    queryset = Vendor.objects.all()
+    lookup_url_kwarg = 'vendor_id'
 
     @swagger_auto_schema(
         operation_description="Remove vendor",
@@ -360,8 +452,10 @@ class VendorDeleteView(generics.DestroyAPIView):
                     }
                 )
             ),
+            401: "Unauthorized",
+            403: "Forbidden - not an admin",
             404: "Vendor not found",
-            403: "Permission denied"
+            500: "Server error"
         }
     )
     def delete(self, request, *args, **kwargs):
@@ -397,7 +491,19 @@ class VendorProductsView(generics.ListAPIView):
     lookup_url_kwarg = 'vendor_id'
 
     @swagger_auto_schema(
-        operation_description="List products for a given vendor"
+        operation_description="List products for a given vendor",
+        responses={
+            200: openapi.Response('Products for this vendor', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'detail': openapi.Schema(type=openapi.TYPE_STRING),
+                    'products': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT))
+                }
+            )),
+            401: "Unauthorized",
+            403: "Forbidden - not authorized to view these products",
+            404: "Vendor not found"
+        }
     )
     def get(self, request, *args, **kwargs):
         vendor_id = self.kwargs.get('vendor_id')
