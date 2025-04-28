@@ -294,7 +294,6 @@ class VendorManagementTests(TestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
 
         response = self.client.delete(self.vendor_delete_url(self.vendor.id))
-        print(response.data)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
 
         # Verify vendor was deleted

@@ -4,7 +4,7 @@ from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.core.mail import send_mail
 from django.shortcuts import get_object_or_404
-from rest_framework import generics, status, permissions, filters
+from rest_framework import generics, status, filters
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenRefreshView
 # from rest_framework_simplejwt.tokens import RefreshToken
@@ -19,7 +19,7 @@ from .serializers import (
 )
 
 from .models import Vendor
-from .permissions import IsAdmin, IsVendorOrAdmin
+from .permissions import IsAdmin, IsVendorOrAdmin, AllowAny, IsAuthenticated
 
 User = get_user_model()
 
@@ -36,7 +36,7 @@ def send_reset_email(user, request):
 
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [AllowAny]
 
     @swagger_auto_schema(
         operation_description="Register a new user",
@@ -78,7 +78,7 @@ class RegisterView(generics.CreateAPIView):
 
 class LoginView(generics.GenericAPIView):
     serializer_class = LoginSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [AllowAny]
 
     @swagger_auto_schema(
         operation_description="Login and obtain JWT token",
@@ -91,7 +91,7 @@ class LoginView(generics.GenericAPIView):
 
 class LogoutView(generics.GenericAPIView):
     serializer_class = LogoutSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         operation_description="Logout and invalidate JWT token",
@@ -105,7 +105,7 @@ class LogoutView(generics.GenericAPIView):
 
 class MeView(generics.RetrieveAPIView):
     serializer_class = UserSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         operation_description="Get current user details",
@@ -118,7 +118,7 @@ class MeView(generics.RetrieveAPIView):
         return self.request.user
 
 class RefreshTokenView(TokenRefreshView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         operation_description="Refresh JWT token",
@@ -129,7 +129,7 @@ class RefreshTokenView(TokenRefreshView):
 
 class PasswordResetView(generics.GenericAPIView):
     serializer_class = PasswordResetSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [AllowAny]
 
     @swagger_auto_schema(
         operation_description="Request password reset email",
@@ -147,7 +147,7 @@ class PasswordResetView(generics.GenericAPIView):
 
 class PasswordResetConfirmView(generics.GenericAPIView):
     serializer_class = PasswordResetConfirmSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [AllowAny]
 
     @swagger_auto_schema(
         operation_description="Confirm password reset with token",
@@ -175,7 +175,7 @@ class PasswordResetConfirmView(generics.GenericAPIView):
 
 class VendorRegistrationView(generics.CreateAPIView):
     serializer_class = VendorRegistrationSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [AllowAny]
 
     @swagger_auto_schema(
         operation_description="Submit vendor registration request",
@@ -198,7 +198,7 @@ class VendorRegistrationView(generics.CreateAPIView):
 
 class VendorListView(generics.ListAPIView):
     serializer_class = VendorSerializer
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [IsAdmin]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['business_name', 'user__username', 'user__email']
     ordering_fields = ['created_at', 'business_name', 'status']
@@ -344,29 +344,53 @@ class VendorBanView(generics.UpdateAPIView):
 
 class VendorDeleteView(generics.DestroyAPIView):
     permission_classes = [IsAdmin]
-    queryset = Vendor.objects.all()
-    lookup_url_kwarg = 'vendor_id'
 
     @swagger_auto_schema(
-        operation_description="Remove vendor"
+        operation_description="Remove vendor",
+        responses={
+            204: openapi.Response(
+                description="Vendor successfully deleted",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'message': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            description="Success message"
+                        )
+                    }
+                )
+            ),
+            404: "Vendor not found",
+            403: "Permission denied"
+        }
     )
-    def destroy(self, request, *args, **kwargs):
-        vendor = self.get_object()
-        vendor_email = vendor.user.email
-        vendor_name = vendor.business_name
+    def delete(self, request, *args, **kwargs):
+        # Get the vendor object based on vendor_id
+        vendor_id = self.kwargs.get('vendor_id')
+        try:
+            if not Vendor.objects.filter(id=vendor_id).exists():
+                return Response({'error': 'Vendor not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Perform deletion
-        response = super().destroy(request, *args, **kwargs)
+            vendor = Vendor.objects.get(id=vendor_id)
+            vendor_email = vendor.user.email
+            vendor_name = vendor.business_name
 
-        # Notify user about account deletion
-        send_mail(
-            'Your Vendor Account was Removed',
-            f'Your vendor account for {vendor_name} has been removed from our system.',
-            'no-reply@primersstore.com',
-            [vendor_email]
-        )
+            # Perform deletion
+            vendor.user.delete()
+            vendor.delete()
 
-        return response
+            # Notify user about account deletion
+            send_mail(
+                'Your Vendor Account was Removed',
+                f'Your vendor account for {vendor_name} has been removed from our system.',
+                'no-reply@primersstore.com',
+                [vendor_email]
+            )
+
+            return Response({'message': 'Vendor deleted successfully.'}, status=status.HTTP_204_NO_CONTENT)
+        except Exception as e:
+            print(e)
+            return Response({'error': 'A server Error occured'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class VendorProductsView(generics.ListAPIView):
     permission_classes = [IsVendorOrAdmin]

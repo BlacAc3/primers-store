@@ -27,6 +27,6 @@ urlpatterns = [
     path('vendors/<int:vendor_id>/reject/', VendorRejectView.as_view(), name='vendor-reject'),
     path('vendors/<int:vendor_id>/suspend/', VendorSuspendView.as_view(), name='vendor-suspend'),
     path('vendors/<int:vendor_id>/ban/', VendorBanView.as_view(), name='vendor-ban'),
-    path('vendors/<int:vendor_id>/', VendorDeleteView.as_view(), name='vendor-delete'),
+    path('vendors/<int:vendor_id>/delete/', VendorDeleteView.as_view(), name='vendor-delete'),
     path('vendors/<int:vendor_id>/products/', VendorProductsView.as_view(), name='vendor-products'),
 ]
