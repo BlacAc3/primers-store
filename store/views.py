@@ -533,7 +533,23 @@ class ProductCreateView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_description="Create a new product (Vendor only)"
+        operation_description="Create a new product (Vendor only)",
+        request_body=ProductCreateSerializer,
+        responses={
+            201: openapi.Response('Created', ProductCreateSerializer),
+            400: openapi.Response('Bad Request', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            403: openapi.Response('Forbidden', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'detail': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
     )
     def post(self, request, *args, **kwargs):
         # Check if user is a vendor
@@ -588,7 +604,16 @@ class ProductListView(generics.ListAPIView):
             openapi.Parameter('q', openapi.IN_QUERY,
                              description="Search query",
                              type=openapi.TYPE_STRING),
-        ]
+        ],
+        responses={
+            200: openapi.Response('Success', ProductListSerializer(many=True)),
+            400: openapi.Response('Bad Request', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
@@ -645,7 +670,22 @@ class ProductDetailView(generics.RetrieveAPIView):
     lookup_url_kwarg = 'product_id'
 
     @swagger_auto_schema(
-        operation_description="Get product details"
+        operation_description="Get product details",
+        responses={
+            200: openapi.Response('Success', ProductDetailSerializer),
+            404: openapi.Response('Not Found', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'detail': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            403: openapi.Response('Forbidden', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'detail': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
@@ -675,13 +715,57 @@ class ProductUpdateView(generics.UpdateAPIView):
     lookup_url_kwarg = 'product_id'
 
     @swagger_auto_schema(
-        operation_description="Update product (Vendor owner or Admin only)"
+        operation_description="Update product (Vendor owner or Admin only)",
+        request_body=ProductUpdateSerializer,
+        responses={
+            200: openapi.Response('Success', ProductUpdateSerializer),
+            400: openapi.Response('Bad Request', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_OBJECT)
+                }
+            )),
+            403: openapi.Response('Forbidden', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'detail': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            404: openapi.Response('Not Found', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'detail': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
     )
     def put(self, request, *args, **kwargs):
         return super().put(request, *args, **kwargs)
 
     @swagger_auto_schema(
-        operation_description="Partially update product (Vendor owner or Admin only)"
+        operation_description="Partially update product (Vendor owner or Admin only)",
+        request_body=ProductUpdateSerializer,
+        responses={
+            200: openapi.Response('Success', ProductUpdateSerializer),
+            400: openapi.Response('Bad Request', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_OBJECT)
+                }
+            )),
+            403: openapi.Response('Forbidden', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'detail': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            404: openapi.Response('Not Found', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'detail': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
     )
     def patch(self, request, *args, **kwargs):
         tags = request.data.get('tags', [])
@@ -696,7 +780,25 @@ class ProductDeleteView(generics.DestroyAPIView):
     lookup_url_kwarg = 'product_id'
 
     @swagger_auto_schema(
-        operation_description="Delete product (Vendor owner or Admin only)"
+        operation_description="Delete product (Vendor owner or Admin only)",
+        responses={
+            204: openapi.Response('No Content', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={}
+            )),
+            403: openapi.Response('Forbidden', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'detail': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            404: openapi.Response('Not Found', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'detail': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
     )
     def delete(self, request, *args, **kwargs):
         product = self.get_object()
