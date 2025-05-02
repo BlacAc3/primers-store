@@ -54,3 +54,15 @@ class IsVendorOwnerOrAdmin(permissions.BasePermission):
             return True
 
         return False
+
+class IsVendorProductOwner(permissions.BasePermission):
+    """
+    Object-level permission to allow vendors to edit their own products.
+    """
+    def has_object_permission(self, request, view, obj):
+        # Check if user is authenticated and is a vendor
+        if not request.user.is_authenticated or not hasattr(request.user, 'vendor_profile'):
+            return False
+
+        # Check if vendor owns this product
+        return obj.vendor.id == request.user.vendor_profile.id

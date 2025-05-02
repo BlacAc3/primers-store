@@ -1,10 +1,13 @@
+from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.core.mail import send_mail
 from django.shortcuts import get_object_or_404
-from rest_framework import generics, status, filters
+from django.db.models import Q
+
+from rest_framework import generics, status, filters, permissions
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenRefreshView
 # from rest_framework_simplejwt.tokens import RefreshToken
@@ -12,14 +15,15 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
 from .serializers import (
-    RegisterSerializer, LoginSerializer, LogoutSerializer,
+    ProductCreateSerializer, ProductListSerializer, ProductUpdateSerializer, RegisterSerializer, LoginSerializer, LogoutSerializer,
     UserSerializer, PasswordResetSerializer, PasswordResetConfirmSerializer,
-    VendorRegistrationSerializer, VendorSerializer, VendorStatusUpdateSerializer,
-    VendorApproveSerializer, VendorRejectSerializer, VendorSuspendSerializer, VendorBanSerializer
+    VendorRegistrationSerializer, VendorSerializer,
+    VendorApproveSerializer, VendorRejectSerializer, VendorSuspendSerializer, VendorBanSerializer,
+    ProductCreateSerializer, ProductListSerializer, ProductDetailSerializer,ProductUpdateSerializer
 )
 
-from .models import Vendor
-from .permissions import IsAdmin, IsVendorOrAdmin, AllowAny, IsAuthenticated
+from .models import Vendor, Product, Category, Tag
+from .permissions import IsAdmin, IsVendorOrAdmin, AllowAny, IsAuthenticated, IsVendorOwnerOrAdmin
 
 User = get_user_model()
 
@@ -523,3 +527,186 @@ class VendorProductsView(generics.ListAPIView):
             "detail": f"Products for vendor {vendor.business_name}",
             "products": []  # This would be filled with actual products
         })
+
+class ProductCreateView(generics.CreateAPIView):
+    serializer_class = ProductCreateSerializer
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="Create a new product (Vendor only)"
+    )
+    def post(self, request, *args, **kwargs):
+        # Check if user is a vendor
+        if not hasattr(request.user, 'vendor_profile'):
+            return Response(
+                {"detail": "Only vendors can create products"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Check if vendor is approved
+        if request.user.vendor_profile.status != Vendor.APPROVED:
+            return Response(
+                {"detail": "Your vendor account must be approved to create products"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        tags = request.data.get('tags', [])
+        for tag in tags:
+            Tag.objects.get_or_create(name=tag.lower())
+
+        return super().post(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        # Assign the vendor automatically
+        serializer.save(vendor=self.request.user.vendor_profile)
+
+
+class ProductListView(generics.ListAPIView):
+    serializer_class = ProductListSerializer
+    permission_classes = [AllowAny]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'description', 'tags__name']
+    ordering_fields = ['created_at', 'price', 'name']
+
+    @swagger_auto_schema(
+        operation_description="List/search products",
+        manual_parameters=[
+            openapi.Parameter('category', openapi.IN_QUERY,
+                             description="Filter by category ID",
+                             type=openapi.TYPE_INTEGER),
+            openapi.Parameter('vendor', openapi.IN_QUERY,
+                             description="Filter by vendor ID",
+                             type=openapi.TYPE_INTEGER),
+            openapi.Parameter('tags', openapi.IN_QUERY,
+                             description="Filter by tags (comma separated)",
+                             type=openapi.TYPE_STRING),
+            openapi.Parameter('priceMin', openapi.IN_QUERY,
+                             description="Minimum price",
+                             type=openapi.TYPE_NUMBER),
+            openapi.Parameter('priceMax', openapi.IN_QUERY,
+                             description="Maximum price",
+                             type=openapi.TYPE_NUMBER),
+            openapi.Parameter('q', openapi.IN_QUERY,
+                             description="Search query",
+                             type=openapi.TYPE_STRING),
+        ]
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    def get_queryset(self):
+        queryset = Product.objects.filter(status=Product.ACTIVE).select_related('vendor', 'category').prefetch_related('tags', 'images')
+
+        # Filter by category
+        category_id = self.request.query_params.get('category')
+        if category_id:
+            # Get all descendant categories too
+            category_ids = [int(category_id)]
+            children = Category.objects.filter(parent_id=category_id)
+            category_ids.extend([child.id for child in children])
+            queryset = queryset.filter(category_id__in=category_ids)
+
+        # Filter by vendor
+        vendor_id = self.request.query_params.get('vendor')
+        if vendor_id:
+            queryset = queryset.filter(vendor_id=vendor_id)
+
+        # Filter by tags
+        tags = self.request.query_params.get('tags')
+        if tags:
+            tag_list = tags.split(',')
+            for tag in tag_list:
+                queryset = queryset.filter(tags__name__iexact=tag.strip())
+
+        # Filter by price range
+        price_min = self.request.query_params.get('priceMin')
+        if price_min:
+            queryset = queryset.filter(price__gte=Decimal(price_min))
+
+        price_max = self.request.query_params.get('priceMax')
+        if price_max:
+            queryset = queryset.filter(price__lte=Decimal(price_max))
+
+        # Search query
+        q = self.request.query_params.get('q')
+        if q:
+            queryset = queryset.filter(
+                Q(name__icontains=q) |
+                Q(description__icontains=q) |
+                Q(tags__name__icontains=q)
+            ).distinct()
+
+        return queryset
+
+
+class ProductDetailView(generics.RetrieveAPIView):
+    serializer_class = ProductDetailSerializer
+    permission_classes = [AllowAny]
+    queryset = Product.objects.all().select_related('vendor', 'category').prefetch_related('tags', 'images')
+    lookup_url_kwarg = 'product_id'
+
+    @swagger_auto_schema(
+        operation_description="Get product details"
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    def get_object(self):
+        obj = super().get_object()
+
+        # If product is not active, only vendor or admin can view it
+        if obj.status != Product.ACTIVE:
+            # Check if user is vendor owner or admin
+            user = self.request.user
+            if not user.is_authenticated or (
+                user.role != 'admin' and
+                (not hasattr(user, 'vendor_profile') or user.vendor_profile.id != obj.vendor.id)
+            ):
+                raise permissions.exceptions.PermissionDenied(
+                    "This product is not active and can only be viewed by its owner or an admin"
+                )
+
+        return obj
+
+
+class ProductUpdateView(generics.UpdateAPIView):
+    serializer_class = ProductUpdateSerializer
+    permission_classes = [IsAuthenticated, IsVendorOwnerOrAdmin]
+    queryset = Product.objects.all()
+    lookup_url_kwarg = 'product_id'
+
+    @swagger_auto_schema(
+        operation_description="Update product (Vendor owner or Admin only)"
+    )
+    def put(self, request, *args, **kwargs):
+        return super().put(request, *args, **kwargs)
+
+    @swagger_auto_schema(
+        operation_description="Partially update product (Vendor owner or Admin only)"
+    )
+    def patch(self, request, *args, **kwargs):
+        tags = request.data.get('tags', [])
+        for tag in tags:
+            Tag.objects.get_or_create(name=tag.lower())
+        return super().patch(request, *args, **kwargs)
+
+
+class ProductDeleteView(generics.DestroyAPIView):
+    permission_classes = [IsAuthenticated, IsVendorOwnerOrAdmin]
+    queryset = Product.objects.all()
+    lookup_url_kwarg = 'product_id'
+
+    @swagger_auto_schema(
+        operation_description="Delete product (Vendor owner or Admin only)"
+    )
+    def delete(self, request, *args, **kwargs):
+        product = self.get_object()
+
+        # For soft delete, we just change the status to DISABLED
+        product.status = Product.DISABLED
+        product.save()
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    # If you want hard delete instead, uncomment this and comment the delete method above
+    # def perform_destroy(self, instance):
+    #     instance.delete()

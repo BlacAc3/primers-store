@@ -5,7 +5,9 @@ from .views import (
     PasswordResetView, PasswordResetConfirmView,
     VendorRegistrationView, VendorListView, VendorDetailView,
     VendorApproveView, VendorRejectView, VendorSuspendView,
-    VendorBanView, VendorDeleteView, VendorProductsView
+    VendorBanView, VendorDeleteView, VendorProductsView,
+    ProductCreateView, ProductListView, ProductDetailView,
+    ProductUpdateView, ProductDeleteView
 )
 
 urlpatterns = [
@@ -29,4 +31,12 @@ urlpatterns = [
     path('vendors/<int:vendor_id>/ban/', VendorBanView.as_view(), name='vendor-ban'),
     path('vendors/<int:vendor_id>/delete/', VendorDeleteView.as_view(), name='vendor-delete'),
     path('vendors/<int:vendor_id>/products/', VendorProductsView.as_view(), name='vendor-products'),
+
+
+    # Product management endpoints
+    path('products/', ProductListView.as_view(), name='product-list'),
+    path('products/create/', ProductCreateView.as_view(), name='product-create'),
+    path('products/<int:product_id>/', ProductDetailView.as_view(), name='product-detail'),
+    path('products/<int:product_id>/update/', ProductUpdateView.as_view(), name='product-update'),
+    path('products/<int:product_id>/delete/', ProductDeleteView.as_view(), name='product-delete'),
 ]

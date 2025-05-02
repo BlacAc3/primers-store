@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import CustomUser as User, Vendor
+from .models import Product, ProductImage, Category, Tag
 
 
 
@@ -198,5 +199,160 @@ class VendorBanSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         instance.status = Vendor.BANNED
         instance.ban_reason = validated_data.get('ban_reason')
+        instance.save()
+        return instance
+
+
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ['id', 'name', 'description', 'image', 'parent']
+
+
+class TagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tag
+        fields = ['id', 'name']
+
+
+class ProductImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductImage
+        fields = ['id', 'image_url', 'alt_text', 'is_primary', 'display_order']
+
+
+class ProductCreateSerializer(serializers.ModelSerializer):
+    images = ProductImageSerializer(many=True, required=False)
+    tags = serializers.SlugRelatedField(
+        many=True,
+        slug_field='name',
+        queryset=Tag.objects.all(),
+        required=False
+    )
+
+    class Meta:
+        model = Product
+        fields = [
+            'id', 'name', 'description', 'price', 'sale_price',
+            'stock_quantity', 'category', 'tags', 'status', 'images'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'vendor']
+
+    def create(self, validated_data):
+        tags = []
+        try:
+            # Handle tags first - remove from validated data
+            tag_names = validated_data.pop('tags', [])
+
+            # Handle images - remove from validated data
+            images_data = validated_data.pop('images', [])
+
+            product = Product.objects.create(**validated_data)
+            # Process tags - create any that don't exist
+            for tag_name in tag_names:
+                tag= Tag.objects.get(name=tag_name.name.lower())
+                tags.append(tag)
+
+            # Add tags to product
+            product.tags.set(tags)
+
+        # Create product images
+            for image_data in images_data:
+                ProductImage.objects.create(product=product, **image_data)
+            return product
+        except:
+            if tags:
+                for tag in tags:
+                   tag.delete()
+            return None
+
+
+class ProductListSerializer(serializers.ModelSerializer):
+    category = CategorySerializer(read_only=True)
+    tags = TagSerializer(many=True, read_only=True)
+    vendor_name = serializers.CharField(source='vendor.business_name', read_only=True)
+    primary_image = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Product
+        fields = [
+            'id', 'name', 'description', 'price', 'sale_price',
+            'stock_quantity', 'category', 'tags', 'status',
+            'vendor_name', 'primary_image', 'created_at'
+        ]
+
+    def get_primary_image(self, obj):
+        primary = obj.images.filter(is_primary=True).first()
+        if primary:
+            return primary.image_url
+        # If no primary image, return the first image or None
+        image = obj.images.first()
+        return image.image_url if image else None
+
+
+class ProductDetailSerializer(serializers.ModelSerializer):
+    category = CategorySerializer(read_only=True)
+    tags = TagSerializer(many=True, read_only=True)
+    images = ProductImageSerializer(many=True, read_only=True)
+    vendor = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Product
+        fields = [
+            'id', 'name', 'description', 'price', 'sale_price',
+            'stock_quantity', 'category', 'tags', 'status',
+            'vendor', 'images', 'created_at', 'updated_at'
+        ]
+
+    def get_vendor(self, obj):
+        return {
+            'id': obj.vendor.id,
+            'business_name': obj.vendor.business_name,
+            'status': obj.vendor.status
+        }
+
+
+class ProductUpdateSerializer(serializers.ModelSerializer):
+    images = ProductImageSerializer(many=True, required=False)
+    tags = serializers.SlugRelatedField(
+        many=True,
+        slug_field='name',
+        queryset=Tag.objects.all(),
+        required=False
+    )
+    class Meta:
+        model = Product
+        fields = [
+            'name', 'description', 'price', 'sale_price',
+            'stock_quantity', 'category', 'tags', 'status', 'images'
+        ]
+
+    def update(self, instance, validated_data):
+        tags = []
+        try:
+            # Update tags to the instance
+            if 'tags' in validated_data:
+                tag_names = validated_data.pop('tags', [])
+                for tag_name in tag_names:
+                    tags.append(tag_name)
+                instance.tags.set(tags)
+            # Handle images if provided
+            if 'images' in validated_data:
+                images_data = validated_data.pop('images', [])
+                # Clear existing images if new set is provided
+                instance.images.all().delete()
+
+                for image_data in images_data:
+                    ProductImage.objects.create(product=instance, **image_data)
+
+            # Update the remaining fields
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+
+        except:
+            if tags:
+                for tag in tags:
+                    tag.delete()
+
         instance.save()
         return instance
