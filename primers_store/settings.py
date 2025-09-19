@@ -51,7 +51,8 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
-    'drf_yasg',
+    'drf_spectacular',
+    # 'drf_yasg',
     #Internal Apps
     'store'
 ]
@@ -95,6 +96,14 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# Spectacular settings
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Primers Store API',
+    'DESCRIPTION': 'API for Primers Store',
+    'VERSION': '1.0.0',
 }
 
 CORS_ORIGIN_ALLOW_ALL = True

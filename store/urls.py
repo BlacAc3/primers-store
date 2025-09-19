@@ -1,5 +1,6 @@
 from rest_framework_simplejwt.views import TokenRefreshView
 from django.urls import path
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from .views import (
     RegisterView, LoginView, LogoutView, MeView,
     PasswordResetView, PasswordResetConfirmView,
@@ -9,10 +10,15 @@ from .views import (
     ProductCreateView, ProductListView, ProductDetailView,
     ProductUpdateView, ProductDeleteView, VendorReviewsView,
     VendorReviewDeleteView, ProductReviewsView, ProductReviewDeleteView,
-    CategoryListCreateView, CategoryDetailView, CategoryUpdateView, CategoryDeleteView
+    CategoryListCreateView, CategoryDetailView, CategoryUpdateView, CategoryDeleteView,
+    TagListCreateView, TagDetailView, TagUpdateView, TagDeleteView
 )
 
 urlpatterns = [
+    # Swagger docs
+    path('schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+
     # Authentication endpoints
     path('register/', RegisterView.as_view(), name='auth-register'),
     path('login/', LoginView.as_view(), name='auth-login'),
@@ -51,4 +57,10 @@ urlpatterns = [
     path('categories/<int:pk>/', CategoryDetailView.as_view(), name='category-detail'),
     path('categories/<int:pk>/update/', CategoryUpdateView.as_view(), name='category-update'),
     path('categories/<int:pk>/delete/', CategoryDeleteView.as_view(), name='category-delete'),
+
+    # Tag endpoints
+    path('tags/', TagListCreateView.as_view(), name='tag-list-create'),
+    path('tags/<int:pk>/', TagDetailView.as_view(), name='tag-detail'),
+    path('tags/<int:pk>/update/', TagUpdateView.as_view(), name='tag-update'),
+    path('tags/<int:pk>/delete/', TagDeleteView.as_view(), name='tag-delete'),
 ]
