@@ -85,7 +85,7 @@ class Category(models.Model):
     """Product categories"""
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
-    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='children')
+    category_parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='children')
     image = models.URLField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
