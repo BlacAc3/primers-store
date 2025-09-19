@@ -3,7 +3,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from store.models import CustomUser, Vendor
+from store.models import CustomUser, Vendor, VendorReview
 
 
 class VendorManagementTests(TestCase):
@@ -93,6 +93,8 @@ class VendorManagementTests(TestCase):
         self.vendor_ban_url = lambda vendor_id: reverse('vendor-ban', args=[vendor_id])
         self.vendor_delete_url = lambda vendor_id: reverse('vendor-delete', args=[vendor_id])
         self.vendor_products_url = lambda vendor_id: reverse('vendor-products', args=[vendor_id])
+        self.vendor_reviews_url = lambda vendor_id: reverse('vendor-reviews', args=[vendor_id])
+        self.vendor_review_delete_url = lambda review_id: reverse('vendor-review-delete', args=[review_id])
 
         # Login URLs
         self.login_url = reverse('auth-login')
@@ -359,3 +361,88 @@ class VendorManagementTests(TestCase):
         # Vendor products (vendor or admin)
         response = self.client.get(self.vendor_products_url(self.vendor.id))
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_create_vendor_review(self):
+        """Test creating a vendor review"""
+        # Authenticate as customer
+        token = self.get_auth_token(self.customer_data)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+        data = {
+            'rating': 5,
+            'comment': 'Great vendor!'
+        }
+        response = self.client.post(self.vendor_reviews_url(self.approved_vendor.id), data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(VendorReview.objects.count(), 1)
+        review = VendorReview.objects.first()
+        self.assertEqual(review.vendor, self.approved_vendor)
+        self.assertEqual(review.user, self.customer)
+        self.assertEqual(review.rating, 5)
+        self.assertEqual(review.comment, 'Great vendor!')
+
+    def test_create_vendor_review_unauthenticated(self):
+        """Test creating a vendor review without authentication"""
+        data = {
+            'rating': 5,
+            'comment': 'Great vendor!'
+        }
+        response = self.client.post(self.vendor_reviews_url(self.approved_vendor.id), data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(VendorReview.objects.count(), 0)
+
+    def test_get_vendor_reviews(self):
+        """Test getting vendor reviews"""
+        # Create a review
+        VendorReview.objects.create(
+            vendor=self.approved_vendor,
+            user=self.customer,
+            rating=4,
+            comment='Good vendor.'
+        )
+
+        # Authenticate as a user (doesn't matter who for listing)
+        token = self.get_auth_token(self.admin_data)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+        response = self.client.get(self.vendor_reviews_url(self.approved_vendor.id))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['rating'], 4)
+        self.assertEqual(response.data[0]['comment'], 'Good vendor.')
+
+    def test_delete_vendor_review_admin(self):
+        """Test deleting a vendor review as admin"""
+        # Create a review
+        review = VendorReview.objects.create(
+            vendor=self.approved_vendor,
+            user=self.customer,
+            rating=4,
+            comment='Good vendor.'
+        )
+
+        # Authenticate as admin
+        token = self.get_auth_token(self.admin_data)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+        response = self.client.delete(self.vendor_review_delete_url(review.id))
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(VendorReview.objects.count(), 0)
+
+    def test_delete_vendor_review_unauthorized(self):
+        """Test deleting a vendor review as a non-admin (should be forbidden)"""
+        # Create a review
+        review = VendorReview.objects.create(
+            vendor=self.approved_vendor,
+            user=self.customer,
+            rating=4,
+            comment='Good vendor.'
+        )
+
+        # Authenticate as customer
+        token = self.get_auth_token(self.customer_data)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+        response = self.client.delete(self.vendor_review_delete_url(review.id))
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(VendorReview.objects.count(), 1)

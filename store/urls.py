@@ -7,7 +7,9 @@ from .views import (
     VendorApproveView, VendorRejectView, VendorSuspendView,
     VendorBanView, VendorDeleteView, VendorProductsView,
     ProductCreateView, ProductListView, ProductDetailView,
-    ProductUpdateView, ProductDeleteView
+    ProductUpdateView, ProductDeleteView, VendorReviewsView,
+    VendorReviewDeleteView, ProductReviewsView, ProductReviewDeleteView,
+    CategoryListCreateView, CategoryDetailView, CategoryUpdateView, CategoryDeleteView
 )
 
 urlpatterns = [
@@ -31,6 +33,8 @@ urlpatterns = [
     path('vendors/<int:vendor_id>/ban/', VendorBanView.as_view(), name='vendor-ban'),
     path('vendors/<int:vendor_id>/delete/', VendorDeleteView.as_view(), name='vendor-delete'),
     path('vendors/<int:vendor_id>/products/', VendorProductsView.as_view(), name='vendor-products'),
+    path('vendors/<int:vendor_id>/reviews/', VendorReviewsView.as_view(), name='vendor-reviews'),
+    path('vendors/reviews/<int:pk>/delete/', VendorReviewDeleteView.as_view(), name='vendor-review-delete'),
 
 
     # Product management endpoints
@@ -39,4 +43,12 @@ urlpatterns = [
     path('products/<int:product_id>/', ProductDetailView.as_view(), name='product-detail'),
     path('products/<int:product_id>/update/', ProductUpdateView.as_view(), name='product-update'),
     path('products/<int:product_id>/delete/', ProductDeleteView.as_view(), name='product-delete'),
+    path('products/<int:product_id>/reviews/', ProductReviewsView.as_view(), name='product-reviews'),
+    path('products/reviews/<int:pk>/delete/', ProductReviewDeleteView.as_view(), name='product-review-delete'),
+
+    # Category endpoints
+    path('categories/', CategoryListCreateView.as_view(), name='category-list-create'),
+    path('categories/<int:pk>/', CategoryDetailView.as_view(), name='category-detail'),
+    path('categories/<int:pk>/update/', CategoryUpdateView.as_view(), name='category-update'),
+    path('categories/<int:pk>/delete/', CategoryDeleteView.as_view(), name='category-delete'),
 ]

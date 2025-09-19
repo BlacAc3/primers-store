@@ -28,7 +28,8 @@ This design breaks down into the seven core modules: Authentication, Vendor Mana
 | PUT    | `/api/vendors/:vendorId/ban`                            | Ban vendor                                       | Admin   |
 | DELETE | `/api/vendors/:vendorId`                                | Remove vendor                                    | Admin   |
 | GET    | `/api/vendors/:vendorId/products`                       | List products for a given vendor                 | Vendor, Admin |
-
+| GET    | `/api/vendors/:vendorId/reviews`                        | List reviews for a specific vendor               | Public  |
+| POST   | `/api/vendors/:vendorId/reviews`                        | Add a review for a specific vendor               | Customer |
 ---
 
 ## 3. Product Listings & Categories
@@ -40,6 +41,8 @@ This design breaks down into the seven core modules: Authentication, Vendor Mana
 | GET    | `/api/products/:productId`                   | Get product details                                 | Public                  |
 | PUT    | `/api/products/:productId`                   | Update product (price, stock, description, photos) | Vendor (own) / Admin    |
 | DELETE | `/api/products/:productId`                   | Disable or remove product                          | Vendor (own) / Admin    |
+| POST   | `/api/products/:productId/reviews`            | Add a review for a specific product               | Customer                |
+| GET    | `/api/products/:productId/reviews`            | List reviews for a specific product                | Public                  |
 
 ### Categories & Tags
 | Method | Endpoint                          | Description                   | Roles     |

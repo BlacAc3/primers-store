@@ -4,7 +4,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from store.models import CustomUser, Vendor, Product, Category, Tag, ProductImage
+from store.models import CustomUser, Vendor, Product, Category, Tag, ProductImage, ProductReview
 
 
 class ProductManagementTests(TestCase):
@@ -146,9 +146,11 @@ class ProductManagementTests(TestCase):
         # Endpoint URLs
         self.product_list_url = reverse('product-list')
         self.product_create_url = reverse('product-create')
-        self.product_detail_url = lambda product_id: reverse('product-detail', args=[product_id])
-        self.product_update_url = lambda product_id: reverse('product-update', args=[product_id])
-        self.product_delete_url = lambda product_id: reverse('product-delete', args=[product_id])
+        self.product_detail_url = f'/api/products/{self.product.id}/'
+        self.draft_product_detail_url = f'/api/products/{self.draft_product.id}/'
+        self.product_update_url = f'/api/products/{self.product.id}/update/'
+        self.product_delete_url = f'/api/products/{self.product.id}/delete/'
+        self.product_review_url = f'/api/products/{self.product.id}/reviews/'
 
         # Login URL
         self.login_url = reverse('auth-login')
@@ -287,7 +289,7 @@ class ProductManagementTests(TestCase):
 
     def test_product_detail_public(self):
         """Test getting product detail publicly"""
-        response = self.client.get(self.product_detail_url(self.product.id))
+        response = self.client.get(self.product_detail_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['name'], self.product.name)
         self.assertEqual(response.data['price'], str(self.product.price))
@@ -297,7 +299,7 @@ class ProductManagementTests(TestCase):
 
     def test_draft_product_detail_public(self):
         """Test that public users can't view draft products"""
-        response = self.client.get(self.product_detail_url(self.draft_product.id))
+        response = self.client.get(self.draft_product_detail_url)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_draft_product_detail_owner(self):
@@ -306,7 +308,7 @@ class ProductManagementTests(TestCase):
         token = self.get_auth_token(self.vendor_data)
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
 
-        response = self.client.get(self.product_detail_url(self.draft_product.id))
+        response = self.client.get(self.draft_product_detail_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['name'], self.draft_product.name)
         self.assertEqual(response.data['status'], Product.DRAFT)
@@ -317,7 +319,7 @@ class ProductManagementTests(TestCase):
         token = self.get_auth_token(self.admin_data)
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
 
-        response = self.client.get(self.product_detail_url(self.draft_product.id))
+        response = self.client.get(self.draft_product_detail_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['name'], self.draft_product.name)
 
@@ -327,7 +329,7 @@ class ProductManagementTests(TestCase):
         token = self.get_auth_token(self.vendor2_data)
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
 
-        response = self.client.get(self.product_detail_url(self.draft_product.id))
+        response = self.client.get(self.draft_product_detail_url)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_update_product_owner(self):
@@ -344,7 +346,7 @@ class ProductManagementTests(TestCase):
             'stock_quantity': 75
         }
 
-        response = self.client.patch(self.product_update_url(self.product.id), data, format='json')
+        response = self.client.patch(self.product_update_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # Verify changes were saved
@@ -366,7 +368,7 @@ class ProductManagementTests(TestCase):
             'price': '9.99'
         }
 
-        response = self.client.patch(self.product_update_url(self.product.id), data, format='json')
+        response = self.client.patch(self.product_update_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
         # Verify product was not changed
@@ -384,7 +386,7 @@ class ProductManagementTests(TestCase):
             'price': '18.99'
         }
 
-        response = self.client.patch(self.product_update_url(self.product.id), data, format='json')
+        response = self.client.patch(self.product_update_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # Verify changes were saved
@@ -402,8 +404,8 @@ class ProductManagementTests(TestCase):
             'tags': ['newtag1', 'newtag2', 'newtag3']
         }
 
-        response = self.client.patch(self.product_update_url(self.product.id), data, format='json')
-        print(response.data)
+        response = self.client.patch(self.product_update_url, data, format='json')
+        # print(response.data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # Verify tags were updated
@@ -435,7 +437,7 @@ class ProductManagementTests(TestCase):
             ]
         }
 
-        response = self.client.patch(self.product_update_url(self.product.id), data, format='json')
+        response = self.client.patch(self.product_update_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # Verify images were updated
@@ -450,7 +452,7 @@ class ProductManagementTests(TestCase):
         token = self.get_auth_token(self.vendor_data)
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
 
-        response = self.client.delete(self.product_delete_url(self.product.id))
+        response = self.client.delete(self.product_delete_url)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
 
         # Verify product was soft-deleted (status changed to DISABLED)
@@ -468,7 +470,7 @@ class ProductManagementTests(TestCase):
         token = self.get_auth_token(self.vendor2_data)
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
 
-        response = self.client.delete(self.product_delete_url(self.product.id))
+        response = self.client.delete(self.product_delete_url)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
         # Verify product was not deleted
@@ -481,7 +483,7 @@ class ProductManagementTests(TestCase):
         token = self.get_auth_token(self.admin_data)
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
 
-        response = self.client.delete(self.product_delete_url(self.product.id))
+        response = self.client.delete(self.product_delete_url)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
 
         # Verify product was soft-deleted
@@ -529,3 +531,100 @@ class ProductManagementTests(TestCase):
 
         response = self.client.post(self.product_create_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_create_product_review(self):
+        """Test creating a product review"""
+        # Authenticate as customer
+        token = self.get_auth_token(self.customer_data)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+        # Create review data
+        data = {
+            'rating': 5,
+            'comment': 'This is a great product!'
+        }
+
+        response = self.client.post(self.product_review_url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        # Verify review was created
+        self.assertEqual(ProductReview.objects.count(), 1)
+        review = ProductReview.objects.first()
+        self.assertEqual(review.product, self.product)
+        self.assertEqual(review.user, self.customer)
+        self.assertEqual(review.rating, data['rating'])
+        self.assertEqual(review.comment, data['comment'])
+
+    def test_create_product_review_unauthenticated(self):
+        """Test creating a product review without authentication (should fail)"""
+        # Create review data
+        data = {
+            'rating': 4,
+            'comment': 'This is a good product.'
+        }
+
+        response = self.client.post(self.product_review_url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(ProductReview.objects.count(), 0)
+
+    def test_get_product_reviews(self):
+        """Test getting a list of product reviews"""
+        # Create a review first
+        ProductReview.objects.create(
+            product=self.product,
+            user=self.customer,
+            rating=4,
+            comment='I like this product'
+        )
+
+        response = self.client.get(self.product_review_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+
+        # Verify review data
+        review_data = response.data[0]
+        self.assertEqual(review_data['rating'], 4)
+        self.assertEqual(review_data['comment'], 'I like this product')
+        self.assertEqual(review_data['user']['username'], self.customer.username)
+
+    def test_delete_product_review_admin(self):
+        """Test deleting a product review as admin"""
+        # Create a review first
+        review = ProductReview.objects.create(
+            product=self.product,
+            user=self.customer,
+            rating=4,
+            comment='I like this product'
+        )
+        review_delete_url = reverse('product-review-delete', kwargs={'pk': review.pk})
+
+        # Authenticate as admin
+        token = self.get_auth_token(self.admin_data)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+        response = self.client.delete(review_delete_url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+        # Verify review was deleted
+        self.assertEqual(ProductReview.objects.count(), 0)
+
+    def test_delete_product_review_unauthorized(self):
+        """Test deleting a product review as an unauthorized user"""
+        # Create a review first
+        review = ProductReview.objects.create(
+            product=self.product,
+            user=self.customer,
+            rating=4,
+            comment='I like this product'
+        )
+        review_delete_url = reverse('product-review-delete', kwargs={'pk': review.pk})
+
+        # Authenticate as customer (not admin)
+        token = self.get_auth_token(self.customer_data)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+        response = self.client.delete(review_delete_url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Verify review was not deleted
+        self.assertEqual(ProductReview.objects.count(), 1)

@@ -18,11 +18,12 @@ from .serializers import (
     ProductCreateSerializer, ProductListSerializer, ProductUpdateSerializer, RegisterSerializer, LoginSerializer, LogoutSerializer,
     UserSerializer, PasswordResetSerializer, PasswordResetConfirmSerializer,
     VendorRegistrationSerializer, VendorSerializer,
-    VendorApproveSerializer, VendorRejectSerializer, VendorSuspendSerializer, VendorBanSerializer,
-    ProductCreateSerializer, ProductListSerializer, ProductDetailSerializer,ProductUpdateSerializer
+    VendorApproveSerializer, VendorRejectSerializer, VendorSuspendSerializer, VendorBanSerializer, VendorReviewSerializer,
+    ProductCreateSerializer, ProductListSerializer, ProductDetailSerializer,ProductUpdateSerializer, ProductReviewSerializer,
+    CategorySerializer,
 )
 
-from .models import Vendor, Product, Category, Tag
+from .models import Vendor, Product, Category, Tag, VendorReview, ProductReview
 from .permissions import IsAdmin, IsVendorOrAdmin, AllowAny, IsAuthenticated, IsVendorOwnerOrAdmin
 
 User = get_user_model()
@@ -221,6 +222,9 @@ class PasswordResetConfirmView(generics.GenericAPIView):
         return Response({'detail': 'Password has been reset.'}, status=status.HTTP_200_OK)
 
 
+
+# Vendor Views
+# --------------------
 class VendorRegistrationView(generics.CreateAPIView):
     serializer_class = VendorRegistrationSerializer
     permission_classes = [AllowAny]
@@ -528,6 +532,37 @@ class VendorProductsView(generics.ListAPIView):
             "products": []  # This would be filled with actual products
         })
 
+
+class VendorReviewsView(generics.ListCreateAPIView):
+    serializer_class = VendorReviewSerializer
+    permission_classes = [IsAuthenticated]
+
+
+    def get_queryset(self):
+        vendor_id = self.kwargs['vendor_id']
+        vendor = get_object_or_404(Vendor, pk=vendor_id)
+        return VendorReview.objects.filter(vendor=vendor)
+
+    def perform_create(self, serializer):
+        vendor_id = self.kwargs['vendor_id']
+        vendor = get_object_or_404(Vendor, pk=vendor_id)
+        serializer.save(user=self.request.user, vendor=vendor)
+
+
+
+class VendorReviewDeleteView(generics.DestroyAPIView):
+    queryset = VendorReview.objects.all()
+    serializer_class = VendorReviewSerializer
+    permission_classes = [IsAdmin]
+
+    def delete(self, request, *args, **kwargs):
+        return self.destroy(request, *args, **kwargs)
+
+
+
+
+#Product Views
+# -----------------------------------
 class ProductCreateView(generics.CreateAPIView):
     serializer_class = ProductCreateSerializer
     permission_classes = [IsAuthenticated]
@@ -809,6 +844,167 @@ class ProductDeleteView(generics.DestroyAPIView):
 
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    # If you want hard delete instead, uncomment this and comment the delete method above
-    # def perform_destroy(self, instance):
-    #     instance.delete()
+class ProductReviewsView(generics.ListCreateAPIView):
+    serializer_class = ProductReviewSerializer
+
+    def get_permissions(self):
+        """
+        Instantiates and returns the list of permissions that this view requires.
+        """
+        if self.request.method == 'GET':
+            permission_classes = [AllowAny]
+        else:
+            permission_classes = [IsAuthenticated]
+        return [permission() for permission in permission_classes]
+
+    def get_queryset(self):
+        product_id = self.kwargs['product_id']
+        product = get_object_or_404(Product, pk=product_id)
+        return ProductReview.objects.filter(product=product)
+
+    def perform_create(self, serializer):
+        product_id = self.kwargs['product_id']
+        product = get_object_or_404(Product, pk=product_id)
+        serializer.save(user=self.request.user, product=product)
+
+class ProductReviewDeleteView(generics.DestroyAPIView):
+    queryset = ProductReview.objects.all()
+    serializer_class = ProductReviewSerializer
+    permission_classes = [IsAdmin]
+
+    def delete(self, request, *args, **kwargs):
+        return self.destroy(request, *args, **kwargs)
+
+
+#Categories Views
+class CategoryListCreateView(generics.ListCreateAPIView):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+    permission_classes = [AllowAny]
+
+    def get_permissions(self):
+        """
+        Instantiates and returns the list of permissions that this view requires.
+        """
+        if self.request.method == 'GET':
+            permission_classes = [AllowAny]
+        else:
+            permission_classes = [IsAdmin]
+        return [permission() for permission in permission_classes]
+
+    @swagger_auto_schema(
+        operation_description="List all categories / Create a new category",
+        responses={
+            200: openapi.Response('Success', serializer_class(many=True)),
+            201: openapi.Response('Created', serializer_class),
+            400: openapi.Response('Bad Request', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            403: openapi.Response('Forbidden', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'detail': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        return self.list(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        return self.create(request, *args, **kwargs)
+
+
+class CategoryDetailView(generics.RetrieveAPIView):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(
+        operation_description="Retrieve a category by id",
+        responses={
+            200: openapi.Response('Success', serializer_class),
+            404: openapi.Response('Not Found', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'detail': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            403: openapi.Response('Forbidden', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'detail': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        return self.retrieve(request, *args, **kwargs)
+
+class CategoryUpdateView(generics.UpdateAPIView):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+    permission_classes = [IsAdmin]
+
+    @swagger_auto_schema(
+        operation_description="Update a category by id",
+        responses={
+            200: openapi.Response('Success', serializer_class),
+            400: openapi.Response('Bad Request', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            404: openapi.Response('Not Found', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'detail': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            403: openapi.Response('Forbidden', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'detail': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
+    def put(self, request, *args, **kwargs):
+        return self.update(request, *args, **kwargs)
+
+    def patch(self, request, *args, **kwargs):
+        return self.partial_update(request, *args, **kwargs)
+
+
+class CategoryDeleteView(generics.DestroyAPIView):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+    permission_classes = [IsAdmin]
+
+    @swagger_auto_schema(
+        operation_description="Delete a category by id",
+        responses={
+            204: openapi.Response('No Content', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={}
+            )),
+            404: openapi.Response('Not Found', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'detail': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            403: openapi.Response('Forbidden', schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'detail': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
+    def delete(self, request, *args, **kwargs):
+        return self.destroy(request, *args, **kwargs)

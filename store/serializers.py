@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import CustomUser as User, Vendor
-from .models import Product, ProductImage, Category, Tag
+from .models import Product, ProductImage, Category, Tag, ProductReview, VendorReview
 
 
 
@@ -85,6 +85,20 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
     uid = serializers.CharField()
     token = serializers.CharField()
     new_password = serializers.CharField(write_only=True)
+
+
+
+class VendorReviewSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+
+    class Meta:
+        model = VendorReview
+        fields = ['id', 'user', 'rating', 'comment', 'created_at']
+        read_only_fields = ['id', 'user', 'created_at']
+    rating = serializers.IntegerField(min_value=1, max_value=5)
+    comment = serializers.CharField(max_length=500)
+    created_at = serializers.DateTimeField(read_only=True)
+
 
 
 # Vendor Serializers
@@ -214,6 +228,17 @@ class TagSerializer(serializers.ModelSerializer):
         model = Tag
         fields = ['id', 'name']
 
+
+class ProductReviewSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+
+    class Meta:
+        model = ProductReview
+        fields = ['id', 'user', 'rating', 'comment', 'created_at']
+        read_only_fields = ['id', 'user', 'created_at']
+    rating = serializers.IntegerField(min_value=1, max_value=5)
+    comment = serializers.CharField(max_length=500)
+    created_at = serializers.DateTimeField(read_only=True)
 
 class ProductImageSerializer(serializers.ModelSerializer):
     class Meta:
