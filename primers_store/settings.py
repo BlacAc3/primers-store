@@ -31,7 +31,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = env('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env.bool('DEBUG', default=True)
 
 ALLOWED_HOSTS = ["*"]
 
@@ -119,7 +119,7 @@ CORS_ORIGIN_ALLOW_ALL = True
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 DATABASES = {
     'default': dj_database_url.config(
-        default=env.str('DATABASE_URL', 'sqlite:////' + str(BASE_DIR / 'db.sqlite3')),
+        default=env('DATABASE_URL'),
         conn_max_age=600
     )
 }
