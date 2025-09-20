@@ -107,11 +107,14 @@ class Tag(models.Model):
 
 class Product(models.Model):
     """Product model"""
+    # These choices represent the product's listing status
+    # A good field name would be listing_status
+
     DRAFT = 'draft'
     ACTIVE = 'active'
     DISABLED = 'disabled'
 
-    STATUS_CHOICES = [
+    LISTING_STATUS_CHOICES = [
         (DRAFT, 'Draft'),
         (ACTIVE, 'Active'),
         (DISABLED, 'Disabled')
@@ -125,7 +128,7 @@ class Product(models.Model):
     stock_quantity = models.IntegerField(default=0)
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, related_name='products')
     tags = models.ManyToManyField(Tag, blank=True, related_name='products')
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=DRAFT)
+    listing_status = models.CharField(max_length=10, choices=LISTING_STATUS_CHOICES, default=DRAFT)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

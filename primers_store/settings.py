@@ -104,6 +104,13 @@ SPECTACULAR_SETTINGS = {
     'TITLE': 'Primers Store API',
     'DESCRIPTION': 'API for Primers Store',
     'VERSION': '1.0.0',
+    # Resolve enum naming collisions in the 'role' field.
+    # By default, drf-spectacular might generate ambiguous names like 'Role016Enum'.
+    # This override provides explicit and distinct names for user roles,
+    # improving clarity in the generated OpenAPI schema.
+    'ENUM_NAME_OVERRIDES': {
+        'store.models.CustomUser.ROLE_CHOICES': 'UserRoleEnum'
+    },
 }
 
 CORS_ORIGIN_ALLOW_ALL = True

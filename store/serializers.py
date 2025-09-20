@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
+from drf_spectacular.utils import extend_schema_field
 from .models import CustomUser as User, Vendor
 from .models import Product, ProductImage, Category, Tag, ProductReview, VendorReview
 
@@ -73,10 +74,41 @@ class LogoutSerializer(serializers.Serializer):
             token.blacklist()
         except Exception as e:
             raise serializers.ValidationError(f"Token error: {str(e)}")
-class UserSerializer(serializers.ModelSerializer):
+
+class UserDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'role']
+        fields = ['id', 'username', 'email', 'phone_number', 'address', 'role' ]
+
+class UserSerializer(serializers.ModelSerializer):
+    vendor = serializers.SerializerMethodField(read_only=True)
+
+    # This nested serializer is used for representing Vendor data within the UserSerializer.
+    # It is required for proper Swagger documentation to avoid warnings when auto-generating
+    # the response schema for the 'vendor' field, which is populated by the 'get_vendor' method.
+    class VendorDataSerializer(serializers.ModelSerializer):
+        class Meta:
+            model = Vendor
+            fields = ['id', 'business_name', 'business_description', 'website', 'status']
+
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'phone_number','address', 'role', 'vendor']
+
+    @extend_schema_field(VendorDataSerializer)
+    def get_vendor(self, obj):
+        """
+        Retrieves and serializes vendor data if the user has a 'vendor' role.
+        Returns None otherwise.
+        """
+        if obj.role == User.VENDOR:
+            try:
+                vendor = Vendor.objects.get(user=obj)
+                return UserSerializer.VendorDataSerializer(vendor).data
+            except Vendor.DoesNotExist:
+                return None
+        return None
+
 
 class PasswordResetSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -125,7 +157,7 @@ class VendorRegistrationSerializer(serializers.ModelSerializer):
 
 
 class VendorSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
+    user = UserDetailSerializer(read_only=True)
 
     class Meta:
         model = Vendor
@@ -220,7 +252,7 @@ class VendorBanSerializer(serializers.ModelSerializer):
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
-        fields = ['id', 'name', 'description', 'image', 'parent']
+        fields = ['id', 'name', 'description', 'image', 'category_parent']
 
 
 class TagSerializer(serializers.ModelSerializer):
@@ -230,15 +262,24 @@ class TagSerializer(serializers.ModelSerializer):
 
 
 class ProductReviewSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
+    user = serializers.SerializerMethodField()
+
+    class UserDataSerializer(serializers.Serializer):
+        id = serializers.IntegerField(read_only=True)
+        username = serializers.CharField(read_only=True)
 
     class Meta:
         model = ProductReview
         fields = ['id', 'user', 'rating', 'comment', 'created_at']
         read_only_fields = ['id', 'user', 'created_at']
+
     rating = serializers.IntegerField(min_value=1, max_value=5)
     comment = serializers.CharField(max_length=500)
     created_at = serializers.DateTimeField(read_only=True)
+
+    @extend_schema_field(UserDataSerializer)
+    def get_user(self, obj):
+        return {'id': obj.user.id, 'username': obj.user.username}
 
 class ProductImageSerializer(serializers.ModelSerializer):
     class Meta:
@@ -259,7 +300,7 @@ class ProductCreateSerializer(serializers.ModelSerializer):
         model = Product
         fields = [
             'id', 'name', 'description', 'price', 'sale_price',
-            'stock_quantity', 'category', 'tags', 'status', 'images'
+            'stock_quantity', 'category', 'tags', 'listing_status', 'images'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'vendor']
 
@@ -302,11 +343,11 @@ class ProductListSerializer(serializers.ModelSerializer):
         model = Product
         fields = [
             'id', 'name', 'description', 'price', 'sale_price',
-            'stock_quantity', 'category', 'tags', 'status',
+            'stock_quantity', 'category', 'tags', 'listing_status',
             'vendor_name', 'primary_image', 'created_at'
         ]
 
-    def get_primary_image(self, obj):
+    def get_primary_image(self, obj) -> str|None:
         primary = obj.images.filter(is_primary=True).first()
         if primary:
             return primary.image_url
@@ -321,14 +362,24 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     images = ProductImageSerializer(many=True, read_only=True)
     vendor = serializers.SerializerMethodField()
 
+    # Define a nested serializer to explicitly describe the structure of the vendor data
+    # returned by get_vendor. This helps drf-spectacular generate accurate documentation.
+    class VendorDetailDataSerializer(serializers.Serializer):
+        id = serializers.IntegerField(read_only=True)
+        business_name = serializers.CharField(read_only=True)
+        status = serializers.CharField(read_only=True)
+
     class Meta:
         model = Product
         fields = [
             'id', 'name', 'description', 'price', 'sale_price',
-            'stock_quantity', 'category', 'tags', 'status',
+            'stock_quantity', 'category', 'tags', 'listing_status',
             'vendor', 'images', 'created_at', 'updated_at'
         ]
 
+    # Use extend_schema_field to provide a type hint for the return value of get_vendor,
+    # resolving the drf-spectacular warning.
+    @extend_schema_field(VendorDetailDataSerializer)
     def get_vendor(self, obj):
         return {
             'id': obj.vendor.id,
@@ -349,7 +400,7 @@ class ProductUpdateSerializer(serializers.ModelSerializer):
         model = Product
         fields = [
             'name', 'description', 'price', 'sale_price',
-            'stock_quantity', 'category', 'tags', 'status', 'images'
+            'stock_quantity', 'category', 'tags', 'listing_status', 'images'
         ]
 
     def update(self, instance, validated_data):
