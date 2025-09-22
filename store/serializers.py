@@ -2,7 +2,7 @@ from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 from drf_spectacular.utils import extend_schema_field
 from .models import CustomUser as User, Vendor
-from .models import Product, ProductImage, Category, Tag, ProductReview, VendorReview
+from .models import Product, ProductImage, Category, Tag, ProductReview, VendorReview, Cart, CartItem, Wishlist, WishlistItem
 
 
 
@@ -432,3 +432,102 @@ class ProductUpdateSerializer(serializers.ModelSerializer):
 
         instance.save()
         return instance
+
+
+class CartItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_price = serializers.DecimalField(source='product.price', max_digits=10, decimal_places=2, read_only=True)
+    product_image = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CartItem
+        fields = ['id', 'product', 'product_name', 'product_price', 'product_image', 'quantity', 'added_at']
+        read_only_fields = ['id', 'added_at']
+
+    def get_product_image(self, obj) -> str | None:
+        primary = obj.product.images.filter(is_primary=True).first()
+        if primary:
+            return primary.image_url
+        image = obj.product.images.first()
+        return image.image_url if image else None
+
+
+class CartSerializer(serializers.ModelSerializer):
+    items = CartItemSerializer(many=True, read_only=True)
+    total_items = serializers.SerializerMethodField()
+    total_price = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Cart
+        fields = ['id', 'user', 'items', 'total_items', 'total_price', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'user', 'created_at', 'updated_at']
+
+    def get_total_items(self, obj):
+        return round(obj.items.count(), 2) if obj.items else 0.00
+
+    def get_total_price(self, obj):
+        return round(sum(item.product.price * item.quantity for item in obj.items.all()), 2) if obj.items else 0.00
+
+
+class AddCartItemSerializer(serializers.Serializer):
+    product_id = serializers.IntegerField()
+    quantity = serializers.IntegerField(min_value=1, default=1)
+
+
+    def validate_product_id(self, value):
+        try:
+            Product.objects.get(id=value)
+        except Product.DoesNotExist:
+            raise serializers.ValidationError("Product does not exist.")
+        return value
+
+
+class UpdateCartItemSerializer(serializers.ModelSerializer):
+    quantity = serializers.IntegerField(min_value=1)
+
+    class Meta:
+        model = CartItem
+        fields = ['quantity']
+
+
+class WishlistItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_price = serializers.DecimalField(source='product.price', max_digits=10, decimal_places=2, read_only=True)
+    product_image = serializers.SerializerMethodField()
+
+    class Meta:
+        model = WishlistItem
+        fields = ['id', 'product', 'product_name', 'product_price', 'product_image', 'added_at']
+        read_only_fields = ['id', 'added_at']
+
+    def get_product_image(self, obj) -> str | None:
+        primary = obj.product.images.filter(is_primary=True).first()
+        if primary:
+            return primary.image_url
+        image = obj.product.images.first()
+        return image.image_url if image else None
+
+
+class WishlistSerializer(serializers.ModelSerializer):
+    items = WishlistItemSerializer(many=True, read_only=True)
+    total_items = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Wishlist
+        fields = ['id', 'user', 'items', 'total_items', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'user', 'created_at', 'updated_at']
+
+    def get_total_items(self, obj):
+        return obj.items.count()
+
+# class AddWishlistItemSerializer(serializers.Serializer):
+#     product_id = serializers.IntegerField()
+
+#     def validate_product_id(self, value):
+#         try:
+#             product = Product.objects.get(id=value)
+#             if not product.is_in_stock:
+#                 raise serializers.ValidationError("This product is currently out of stock and cannot be added to the wishlist.")
+#         except Product.DoesNotExist:
+#             raise serializers.ValidationError("Product does not exist.")
+#         return value

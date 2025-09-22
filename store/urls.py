@@ -11,7 +11,9 @@ from .views import (
     ProductUpdateView, ProductDeleteView, VendorReviewsView,
     VendorReviewDeleteView, ProductReviewsView, ProductReviewDeleteView,
     CategoryListCreateView, CategoryDetailView, CategoryUpdateView, CategoryDeleteView,
-    TagListCreateView, TagDetailView, TagUpdateView, TagDeleteView
+    TagListCreateView, TagDetailView, TagUpdateView, TagDeleteView,
+    CartView, CartAddItemView, CartUpdateItemView, CartRemoveItemView,
+    WishlistView, WishlistAddItemView, WishlistRemoveItemView
 )
 
 urlpatterns = [
@@ -63,4 +65,13 @@ urlpatterns = [
     path('tags/<int:pk>/', TagDetailView.as_view(), name='tag-detail'),
     path('tags/<int:pk>/update/', TagUpdateView.as_view(), name='tag-update'),
     path('tags/<int:pk>/delete/', TagDeleteView.as_view(), name='tag-delete'),
+
+    # Cart & Wishlist endpoints
+    path('cart/', CartView.as_view(), name='cart-detail'),
+    path('cart/add/', CartAddItemView.as_view(), name='cart-add-item'),
+    path('cart/update/<int:itemId>/', CartUpdateItemView.as_view(), name='cart-update-item'),
+    path('cart/remove/<int:itemId>/', CartRemoveItemView.as_view(), name='cart-remove-item'),
+    path('wishlist/', WishlistView.as_view(), name='wishlist-detail'),
+    path('wishlist/<int:productId>/', WishlistAddItemView.as_view(), name='wishlist-add-item'),
+    path('wishlist/remove/<int:productId>/', WishlistRemoveItemView.as_view(), name='wishlist-remove-item'),
 ]

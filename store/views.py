@@ -7,7 +7,7 @@ from django.core.mail import send_mail
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 
-from rest_framework import generics, status, filters, permissions
+from rest_framework import generics, status, filters, permissions,serializers
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenRefreshView
 # from rest_framework_simplejwt.tokens import RefreshToken
@@ -21,10 +21,12 @@ from .serializers import (
     VendorApproveSerializer, VendorRejectSerializer, VendorSuspendSerializer, VendorBanSerializer, VendorReviewSerializer,
     ProductCreateSerializer, ProductListSerializer, ProductDetailSerializer,ProductUpdateSerializer, ProductReviewSerializer,
     CategorySerializer, TagSerializer,
+    CartSerializer, CartItemSerializer, AddCartItemSerializer,UpdateCartItemSerializer,
+    WishlistSerializer, WishlistItemSerializer,
 )
 
-from .models import Vendor, Product, Category, Tag, VendorReview, ProductReview
-from .permissions import IsAdmin, IsVendorOrAdmin, AllowAny, IsAuthenticated, IsVendorOwnerOrAdmin
+from .models import Vendor, Product, Category, Tag, VendorReview, ProductReview, Cart, CartItem, Wishlist, WishlistItem
+from .permissions import IsAdmin, IsVendorOrAdmin, IsVendor, IsCustomer, AllowAny, IsAuthenticated, IsVendorOwnerOrAdmin
 
 User = get_user_model()
 
@@ -1102,3 +1104,251 @@ class TagDeleteView(generics.DestroyAPIView):
 
     def delete(self, request, *args, **kwargs):
         return self.destroy(request, *args, **kwargs)
+
+
+@extend_schema(
+    description="Get current user’s cart items",
+    responses={
+        200: CartSerializer,
+        401: {"type": "object", "properties": {'detail': {"type": "string"}}},
+        403: {"type": "object", "properties": {'detail': {"type": "string"}}},
+    }
+)
+class CartView(generics.RetrieveAPIView):
+    """
+    GET /api/cart: Get current user’s cart items
+    Roles: Customer
+    """
+    serializer_class = CartSerializer
+    permission_classes = [IsCustomer]
+
+    def get_object(self):
+        # Ensure a cart exists for the user. If not, create one.
+        cart, created = Cart.objects.get_or_create(user=self.request.user)
+        return cart
+
+@extend_schema(
+    description="Add product to cart",
+    request=AddCartItemSerializer,
+    responses={
+        201: CartItemSerializer,
+        400: {"type": "object", "properties": {'detail': {"type": "string"}}},
+        403: {"type": "object", "properties": {'detail': {"type": "string"}}},
+    }
+)
+class CartAddItemView(generics.CreateAPIView):
+    """
+    POST /api/cart/add: Add product to cart (`productId`, `qty`)
+    Roles: Customer
+    """
+    serializer_class = AddCartItemSerializer
+    permission_classes = [IsCustomer]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Get arguments
+        user = request.user
+        product_id = serializer.validated_data['product_id']
+        quantity = serializer.validated_data['quantity']
+        cart, created = Cart.objects.get_or_create(user=user)
+        try:
+            product = Product.objects.get(id=product_id)
+        except Product.DoesNotExist:
+            return Response({"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
+
+
+        # Check if quantity exceeds stock
+        if product.stock_quantity < quantity:
+            return Response(
+                {'quantity': f'Only {product.stock_quantity} units of {product.name} are available.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        cart_item, item_created = CartItem.objects.get_or_create(cart=cart, product=product, defaults={'quantity': quantity})
+
+        if not item_created:
+            # If item already in cart, update quantity
+            new_quantity = cart_item.quantity + quantity
+            if product.stock_quantity < new_quantity:
+                return Response(
+                    {"quantity": f"Adding {quantity} units would exceed available stock. Only {product.stock_quantity - cart_item.quantity} more units can be added."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            cart_item.quantity = new_quantity
+            cart_item.save()
+
+        # Return the updated cart item
+        cart_item_serializer = CartItemSerializer(cart_item)
+        return Response(cart_item_serializer.data, status=status.HTTP_201_CREATED)
+
+@extend_schema(
+    description="Update cart item quantity",
+    request=UpdateCartItemSerializer,
+    responses={
+        200: CartItemSerializer,
+        400: {"type": "object", "properties": {'detail': {"type": "string"}}},
+        403: {"type": "object", "properties": {'detail': {"type": "string"}}},
+        404: {"type": "object", "properties": {'detail': {"type": "string"}}},
+    }
+)
+class CartUpdateItemView(generics.UpdateAPIView):
+    """
+    PUT /api/cart/update/:itemId: Update cart item quantity
+    Roles: Customer
+    """
+    queryset = CartItem.objects.all()
+    serializer_class = UpdateCartItemSerializer
+    permission_classes = [IsCustomer]
+    lookup_field = 'id'
+    lookup_url_kwarg = 'itemId'
+
+    def get_queryset(self):
+        user = self.request.user
+        cart = get_object_or_404(Cart, user=user)
+        return self.queryset.filter(cart=cart)
+
+    def put(self, request, *args, **kwargs):
+        cart_item = self.get_object()
+        serializer = self.get_serializer(cart_item, data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        product = cart_item.product
+        new_quantity = serializer.validated_data.get('quantity', cart_item.quantity)
+
+        # Check if product is in stock for the new quantity
+        if product.stock_quantity < new_quantity:
+            return Response(
+                {'quantity': f'Only {product.stock_quantity} units of {product.name} are available.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer.save()
+
+        return Response(serializer.data)
+
+    def patch(self, request, *args, **kwargs):
+        cart_item = self.get_object()
+        serializer = self.get_serializer(cart_item, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+
+        product = cart_item.product
+        new_quantity = serializer.validated_data.get('quantity', cart_item.quantity)
+
+        # Check if product is in stock for the new quantity
+        if product.stock_quantity < new_quantity:
+            return Response(
+                {'quantity': f'Only {product.stock_quantity} units of {product.name} are available.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer.save()
+        return Response(serializer.data)
+
+@extend_schema(
+    description="Remove item from cart",
+    responses={
+        204: None,
+        403: {"type": "object", "properties": {'detail': {"type": "string"}}},
+        404: {"type": "object", "properties": {'detail': {"type": "string"}}},
+    }
+)
+class CartRemoveItemView(generics.DestroyAPIView):
+    """
+    DELETE /api/cart/remove/:itemId: Remove item from cart
+    Roles: Customer
+    """
+    queryset = CartItem.objects.all()
+    permission_classes = [IsCustomer]
+    lookup_field = 'id'
+    lookup_url_kwarg = 'itemId'
+
+    def get_queryset(self):
+        user = self.request.user
+        cart = get_object_or_404(Cart, user=user)
+        return self.queryset.filter(cart=cart)
+
+@extend_schema(
+    description="Get wishlist",
+    responses={
+        200: WishlistSerializer,
+        403: {"type": "object", "properties": {'detail': {"type": "string"}}},
+    }
+)
+class WishlistView(generics.RetrieveAPIView):
+    """
+    GET /api/wishlist: Get wishlist
+    Roles: Customer
+    """
+    serializer_class = WishlistSerializer
+    permission_classes = [IsCustomer]
+
+    def get_object(self):
+        # Ensure a wishlist exists for the user. If not, create one.
+        wishlist, created = Wishlist.objects.get_or_create(user=self.request.user)
+        return wishlist
+
+@extend_schema(
+    description="Add product to wishlist",
+    responses={
+        201: WishlistItemSerializer,
+        400: {"type": "object", "properties": {'detail': {"type": "string"}}},
+        403: {"type": "object", "properties": {'detail': {"type": "string"}}},
+    }
+)
+class WishlistAddItemView(generics.CreateAPIView):
+    """
+    POST /api/wishlist/:productId: Add product to wishlist
+    Roles: Customer
+    """
+    serializer_class = WishlistItemSerializer
+    permission_classes = [IsCustomer]
+
+    def create(self, request, *args, **kwargs):
+        user = request.user
+        product_id = self.kwargs.get('productId')
+
+        wishlist, created = Wishlist.objects.get_or_create(user=user)
+        product = get_object_or_404(Product, id=product_id)
+        # Check if product is out of stock
+        if product.stock_quantity <= 0:
+            return Response({'detail': 'Product is out of stock.'}, status=status.HTTP_400_BAD_REQUEST)
+        # Check if the product is already in the wishlist
+        if WishlistItem.objects.filter(wishlist=wishlist, product=product).exists():
+            return Response({'detail': 'Product already in wishlist.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        wishlist_item = WishlistItem.objects.create(wishlist=wishlist, product=product)
+        serializer = self.get_serializer(wishlist_item)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+@extend_schema(
+    description="Remove from wishlist",
+    responses={
+        204: None,
+        403: {"type": "object", "properties": {'detail': {"type": "string"}}},
+        404: {"type": "object", "properties": {'detail': {"type": "string"}}},
+    }
+)
+class WishlistRemoveItemView(generics.DestroyAPIView):
+    """
+    DELETE /api/wishlist/:productId: Remove from wishlist
+    Roles: Customer
+    """
+    queryset = WishlistItem.objects.all()
+    permission_classes = [ IsCustomer]
+    lookup_field = 'product_id' # We'll use product_id for removal
+
+    def get_queryset(self):
+        user = self.request.user
+        wishlist = get_object_or_404(Wishlist, user=user)
+        return self.queryset.filter(wishlist=wishlist)
+
+    def get_object(self):
+        # Override get_object to filter by product_id and wishlist
+        queryset = self.get_queryset()
+        filter_kwargs = {self.lookup_field: self.kwargs[self.lookup_url_kwarg]}
+        obj = get_object_or_404(queryset, **filter_kwargs)
+        return obj
+
+    lookup_url_kwarg = 'productId'
