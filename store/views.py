@@ -23,10 +23,12 @@ from .serializers import (
     CategorySerializer, TagSerializer,
     CartSerializer, CartItemSerializer, AddCartItemSerializer,UpdateCartItemSerializer,
     WishlistSerializer, WishlistItemSerializer,
+    OrderSerializer, CartOrderSerializer, OrderStatusUpdateSerializer,
 )
 
-from .models import Vendor, Product, Category, Tag, VendorReview, ProductReview, Cart, CartItem, Wishlist, WishlistItem
-from .permissions import IsAdmin, IsVendorOrAdmin, IsVendor, IsCustomer, AllowAny, IsAuthenticated, IsVendorOwnerOrAdmin
+from .models import Vendor, Product, Category, Tag, VendorReview, ProductReview, Cart, CartItem, Wishlist, WishlistItem,Order
+
+from .permissions import IsAdmin, IsVendorOrAdmin, IsVendor, IsCustomer, AllowAny, IsAuthenticated, IsVendorOwnerOrAdmin, IsOwnerOfOrder
 
 User = get_user_model()
 
@@ -746,16 +748,16 @@ class ProductListView(generics.ListAPIView):
         return super().get(request, *args, **kwargs)
 
     def get_queryset(self):
-        queryset = Product.objects.filter(status=Product.ACTIVE).select_related('vendor', 'category').prefetch_related('tags', 'images')
+        queryset = Product.objects.filter(listing_status=Product.ACTIVE).select_related('vendor', 'category').prefetch_related('tags', 'images')
 
         # Filter by category
         category_id = self.request.query_params.get('category')
         if category_id:
             # Get all descendant categories too
             category_ids = [int(category_id)]
-            children = Category.objects.filter(parent_id=category_id)
+            children = Category.objects.filter(category_parent__id=category_id)
             category_ids.extend([child.id for child in children])
-            queryset = queryset.filter(category_id__in=category_ids)
+            queryset = queryset.filter(category__id__in=category_ids)
 
         # Filter by vendor
         vendor_id = self.request.query_params.get('vendor')
@@ -811,7 +813,7 @@ class ProductDetailView(generics.RetrieveAPIView):
         obj = super().get_object()
 
         # If product is not active, only vendor or admin can view it
-        if obj.status != Product.ACTIVE:
+        if obj.listing_status != Product.ACTIVE:
             # Check if user is vendor owner or admin
             user = self.request.user
             if not user.is_authenticated or (
@@ -877,7 +879,7 @@ class ProductDeleteView(generics.DestroyAPIView):
         product = self.get_object()
 
         # For soft delete, we just change the status to DISABLED
-        product.status = Product.DISABLED
+        product.listing_status = Product.DISABLED
         product.save()
 
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -1352,3 +1354,80 @@ class WishlistRemoveItemView(generics.DestroyAPIView):
         return obj
 
     lookup_url_kwarg = 'productId'
+
+
+class CartOrderCreateView(generics.CreateAPIView):
+    """
+    POST /api/cart/place-order/: Place an order from items in the cart
+    Roles: Customer
+    """
+    serializer_class = CartOrderSerializer
+
+    permission_classes = [IsCustomer]
+
+    def perform_create(self, serializer):
+        # Get the user's cart
+        cart = get_object_or_404(Cart, user=self.request.user)
+        cart_items = CartItem.objects.filter(cart=cart)
+        shipping_address = self.request.data.get('shipping_address')
+        recipient_name = self.request.data.get('recipient_name')
+        serializer.is_valid(raise_exception=True)
+        if not cart_items.exists():
+            raise serializers.ValidationError("Your cart is empty.")
+
+        # Calculate the total order amount
+
+
+        # Create order items from the cart items
+        for cart_item in cart_items:
+            Order.objects.create(
+                shipping_address=shipping_address,
+                recipient_name=recipient_name,
+                product=cart_item.product,
+                quantity=cart_item.quantity,
+                price=cart_item.product.price
+            )
+            # Reduce stock quantity
+            product = cart_item.product
+            product.stock_quantity -= cart_item.quantity
+            product.save()
+
+        # Clear the cart
+        cart_items.delete()
+
+class OrderListCreateView(generics.ListCreateAPIView):
+    """
+    POST /api/orders: Place an order (checkout)
+    GET /api/orders: List user’s past orders
+    Roles: Customer
+    """
+    serializer_class = OrderSerializer
+    permission_classes = [IsCustomer]
+
+    def get_queryset(self):
+        # List orders only for the current user
+        return Order.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+
+        # Save the current user as the order's user
+        serializer.save(user=self.request.user,context={'request': self.request})
+
+
+class OrderDetailView(generics.RetrieveAPIView):
+    """
+    GET /api/orders/:orderId: Get order details/track shipping
+    Roles: Customer, Admin, Vendor (own)
+    """
+    serializer_class = OrderSerializer
+    permission_classes=[IsAdmin | IsOwnerOfOrder]
+    queryset = Order.objects.all()
+
+
+class OrderStatusUpdateView(generics.UpdateAPIView):
+    """
+    PUT /api/orders/:orderId/status: Update order status (e.g., shipped)
+    Roles: Admin, Vendor (own)
+    """
+    serializer_class = OrderStatusUpdateSerializer
+    queryset = Order.objects.all()

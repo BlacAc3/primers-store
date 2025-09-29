@@ -2,7 +2,7 @@ from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 from drf_spectacular.utils import extend_schema_field
 from .models import CustomUser as User, Vendor
-from .models import Product, ProductImage, Category, Tag, ProductReview, VendorReview, Cart, CartItem, Wishlist, WishlistItem
+from .models import Product, ProductImage, Category, Tag, ProductReview, VendorReview, Cart, CartItem, Wishlist, WishlistItem, Order
 
 
 
@@ -531,3 +531,91 @@ class WishlistSerializer(serializers.ModelSerializer):
 #         except Product.DoesNotExist:
 #             raise serializers.ValidationError("Product does not exist.")
 #         return value
+
+
+# class OrderDetailsSerializer(serializers.ModelSerializer):
+#     items = serializers.ListField(child=serializers.IntegerField(), write_only=True, required=False,
+#                                   help_text="List of product IDs to include in the order.")
+#     class Meta:
+#         model = OrderDetails
+#         fields = ['id', 'user','created_at', 'total_amount', 'status', 'shipping_address', 'billing_address', 'payment_method', 'payment_status', 'transaction_id', 'items']
+#         read_only_fields = ['id', 'user', 'created_at', 'total_amount']
+
+
+
+#     def create(self, validated_data):
+#         items_data = validated_data.pop('items', [])  # Extract item IDs from validated data
+
+#         order_details = OrderDetails.objects.create(**validated_data)
+
+#         # Add order items based on the provided product IDs
+#         for product_id in items_data:
+#             try:
+#                 product = Product.objects.get(pk=product_id)
+#                 Order.objects.create(order_details=order_details, product=product, quantity=1, price=product.price)  # You may adjust quantity here
+#             except Product.DoesNotExist:
+#                 order_details.delete()
+#                 raise serializers.ValidationError(f"Product with id {product_id} not found.")
+
+#         order_details.total_amount = sum(item.product.price * item.quantity for item in order_details.orderitem_set.all())
+#         order_details.save()
+
+#         return order_details
+
+class OrderSerializer(serializers.ModelSerializer):
+    product = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all(), required=True)
+    shipping_address = serializers.CharField(required=True)
+    recipient_name = serializers.CharField(required=True)
+    quantity = serializers.IntegerField(required=True, min_value=1)
+
+    class Meta:
+        model = Order
+        fields = ['shipping_address','recipient_name', 'product', 'quantity']
+
+    # def validate(self, attrs):
+    #     if not attrs.get("shipping_address") or not attrs.get("recipient_name") or not attrs.get("quantity"):
+    #         raise serializers.ValidationError("Missing Fields")
+    #     return attrs
+
+    def create(self, validated_data):
+        # Access the request from the serializer context
+        request = self.context.get('request')
+        if request and hasattr(request, 'user'):
+            user = request.user
+            product = validated_data.get('product')
+
+            if not product:
+                raise serializers.ValidationError("Product not found.")
+            # Create the order using the validated data and the authenticated user
+            order = Order.objects.create(
+                user=user,
+                shipping_address=validated_data.get('shipping_address'),
+                recipient_name=validated_data.get('recipient_name'),
+                product=product,
+                quantity=validated_data.get('quantity'),
+                price=validated_data.get('product').price,
+            )
+
+            return order
+        else:
+            raise serializers.ValidationError("User not authenticated.")
+
+
+class CartOrderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Order
+        fields = ['shipping_address','recipient_name']
+
+    def validate(self, attrs):
+        if not attrs.get("shipping_address"):
+             raise serializers.ValidationError("Shipping address is required.")
+        if not attrs.get("recipient_name"):
+             raise serializers.ValidationError("Recepient name is required.")
+
+        return attrs
+
+
+class OrderStatusUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Order
+        fields = ['status']

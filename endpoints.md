@@ -85,6 +85,8 @@ This design breaks down into the seven core modules: Authentication, Vendor Mana
 | Method | Endpoint                                            | Description                                               | Roles        |
 |--------|-----------------------------------------------------|-----------------------------------------------------------|--------------|
 | POST   | `/api/payments/initiate`                            | Initiate payment (body: `orderId`, `method`, `amount`)    | Customer     |
+| GET    | `/api/payments/:paymentId`                          | Get payment details                                       | Customer, Admin, Vendor |
+| GET    | `/api/payments/:paymentId/status`                   | Get payment status                                        | Customer, Admin, Vendor |
 | POST   | `/api/payments/webhook/paystack`                    | Paystack callback/webhook                                | Public (Paystack) |
 | POST   | `/api/payments/webhook/flutterwave`                 | Flutterwave webhook                                      | Public (Flutterwave) |
 | POST   | `/api/payments/webhook/stripe`                      | Stripe webhook                                           | Public (Stripe) |

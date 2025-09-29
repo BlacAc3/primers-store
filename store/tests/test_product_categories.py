@@ -102,13 +102,13 @@ class CategoryTests(APITestCase):
         data = {
             'name': 'Child Category',
             'description': 'Child Category Description',
-            'parent': parent_category.id
+            'category_parent': parent_category.id
         }
         self.admin_client.credentials(HTTP_AUTHORIZATION='Bearer ' + self.admin_token)
         response = self.admin_client.post(self.list_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         child_category = Category.objects.get(name='Child Category')
-        self.assertEqual(child_category.parent, parent_category)
+        self.assertEqual(child_category.category_parent, parent_category)
         self.admin_client.credentials()
 
     def test_update_category_image(self):

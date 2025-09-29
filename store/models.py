@@ -24,6 +24,7 @@ class CustomUser(AbstractUser):
     phone_number = models.CharField(max_length=15, blank=True)
     address = models.TextField(blank=True)
 
+
     def is_vendor(self):
         return self.role == self.VENDOR
 
@@ -226,3 +227,79 @@ class WishlistItem(models.Model):
 
     class Meta:
         unique_together = ('wishlist', 'product')
+
+
+# class OrderDetails(models.Model):
+#     """
+#     Order model for customer purchases
+#     """
+#     PENDING = 'pending'
+#     PROCESSING = 'processing'
+#     SHIPPED = 'shipped'
+#     DELIVERED = 'delivered'
+#     CANCELLED = 'cancelled'
+#     REFUNDED = 'refunded'
+
+#     ORDER_STATUS_CHOICES = [\
+#         (PENDING, 'Pending'),
+#         (PROCESSING, 'Processing'),
+#         (SHIPPED, 'Shipped'),
+#         (DELIVERED, 'Delivered'),
+#         (CANCELLED, 'Cancelled'),
+#         (REFUNDED, 'Refunded'),
+#     ]
+
+#     user = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, related_name='orders')
+#     status = models.CharField(max_length=20, choices=ORDER_STATUS_CHOICES, default=PENDING)
+#     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
+#     shipping_address = models.TextField()
+#     billing_address = models.TextField(blank=True, null=True)
+#     payment_method = models.CharField(max_length=50) # e.g., 'Credit Card', 'PayPal', 'Paystack'
+#     payment_status = models.CharField(max_length=50, default='pending') # e.g., 'pending', 'paid', 'failed', 'refunded'
+#     transaction_id = models.CharField(max_length=100, blank=True, null=True)
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+
+#     def __str__(self):
+#         return f"Order {self.id} by {self.user.username}"
+
+#TODO: class PaymentDetails(models.Model):
+
+
+
+class Order(models.Model):
+    """
+    Items within an order
+    """
+
+    PENDING = 'pending'
+    PROCESSING = 'processing'
+    SHIPPED = 'shipped'
+    DELIVERED = 'delivered'
+    CANCELLED = 'cancelled'
+    REFUNDED = 'refunded'
+
+    ORDER_STATUS_CHOICES = [
+        (PENDING, 'Pending'),
+        (PROCESSING, 'Processing'),
+        (SHIPPED, 'Shipped'),
+        (DELIVERED, 'Delivered'),
+        (CANCELLED, 'Cancelled'),
+        (REFUNDED, 'Refunded'),
+    ]
+
+    user=models.ForeignKey(CustomUser, on_delete=models.CASCADE,related_name="orders")
+    status = models.CharField(max_length=20, choices=ORDER_STATUS_CHOICES, default=PENDING)
+    shipping_address=models.CharField(max_length=100, blank=True,null=True)
+    recipient_name=models.CharField(max_length=100, blank=True,null=True)
+    product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, unique=True)
+    quantity = models.PositiveIntegerField(default=1)
+    price = models.DecimalField(max_digits=10, decimal_places=2) # Price at the time of order
+    transaction_id = models.CharField(max_length=100, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+
+    def __str__(self):
+        return f"{self.quantity} x {self.product.name}  "

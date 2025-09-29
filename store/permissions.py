@@ -73,3 +73,15 @@ class IsVendorProductOwner(permissions.BasePermission):
 
         # Check if vendor owns this product
         return obj.vendor.id == request.user.vendor_profile.id
+
+
+class IsOwnerOfOrder(permissions.BasePermission):
+    """
+    Object-level permission to allow customers to view/manage their own orders.
+    """
+    def has_object_permission(self, request, view, obj):
+        # The order's user must match the authenticated user
+        if hasattr(request.user, 'vendor_profile'):
+            return False
+
+        return obj.user.id == request.user.id

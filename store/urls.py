@@ -13,7 +13,8 @@ from .views import (
     CategoryListCreateView, CategoryDetailView, CategoryUpdateView, CategoryDeleteView,
     TagListCreateView, TagDetailView, TagUpdateView, TagDeleteView,
     CartView, CartAddItemView, CartUpdateItemView, CartRemoveItemView,
-    WishlistView, WishlistAddItemView, WishlistRemoveItemView
+    WishlistView, WishlistAddItemView, WishlistRemoveItemView,
+    CartOrderCreateView, OrderListCreateView, OrderDetailView, OrderStatusUpdateView,
 )
 
 urlpatterns = [
@@ -74,4 +75,10 @@ urlpatterns = [
     path('wishlist/', WishlistView.as_view(), name='wishlist-detail'),
     path('wishlist/<int:productId>/', WishlistAddItemView.as_view(), name='wishlist-add-item'),
     path('wishlist/remove/<int:productId>/', WishlistRemoveItemView.as_view(), name='wishlist-remove-item'),
+
+    # Order endpoints
+    path('orders/', OrderListCreateView.as_view(), name='order-list-create'),
+    path('cart/place-order/', CartOrderCreateView.as_view(), name='cart-order-create'),
+    path('orders/<int:pk>/', OrderDetailView.as_view(), name='order-detail'),
+    path('orders/<int:pk>/status/', OrderStatusUpdateView.as_view(), name='order-status-update'),
 ]

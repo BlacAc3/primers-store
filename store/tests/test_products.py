@@ -92,7 +92,7 @@ class ProductManagementTests(TestCase):
         self.sub_category = Category.objects.create(
             name="Test Subcategory",
             description="This is a test subcategory",
-            parent=self.category
+            category_parent=self.category
         )
 
         # Create tags
@@ -107,7 +107,7 @@ class ProductManagementTests(TestCase):
             price=Decimal('19.99'),
             stock_quantity=100,
             category=self.category,
-            status=Product.ACTIVE
+            listing_status=Product.ACTIVE
         )
 
         # Add tags to product
@@ -129,7 +129,7 @@ class ProductManagementTests(TestCase):
             price=Decimal('29.99'),
             stock_quantity=50,
             category=self.sub_category,
-            status=Product.DRAFT
+            listing_status=Product.DRAFT
         )
 
         # Create a product for another vendor
@@ -140,7 +140,7 @@ class ProductManagementTests(TestCase):
             price=Decimal('15.99'),
             stock_quantity=75,
             category=self.category,
-            status=Product.ACTIVE
+            listing_status=Product.ACTIVE
         )
 
         # Endpoint URLs
@@ -178,7 +178,7 @@ class ProductManagementTests(TestCase):
             'stock_quantity': 50,
             'category': self.category.id,
             'tags': ['new', 'test'],
-            'status': Product.ACTIVE,
+            'listing_status': Product.ACTIVE,
             'images': [
                 {
                     'image_url': 'https://example.com/new-image.jpg',
@@ -219,7 +219,7 @@ class ProductManagementTests(TestCase):
             'price': '14.99',
             'stock_quantity': 25,
             'category': self.category.id,
-            'status': Product.ACTIVE
+            'listing_status': Product.ACTIVE
         }
 
         response = self.client.post(self.product_create_url, data, format='json')
@@ -311,7 +311,7 @@ class ProductManagementTests(TestCase):
         response = self.client.get(self.draft_product_detail_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['name'], self.draft_product.name)
-        self.assertEqual(response.data['status'], Product.DRAFT)
+        self.assertEqual(response.data['listing_status'], Product.DRAFT)
 
     def test_draft_product_detail_admin(self):
         """Test that admin can view draft products from any vendor"""
@@ -457,7 +457,7 @@ class ProductManagementTests(TestCase):
 
         # Verify product was soft-deleted (status changed to DISABLED)
         self.product.refresh_from_db()
-        self.assertEqual(self.product.status, Product.DISABLED)
+        self.assertEqual(self.product.listing_status, Product.DISABLED)
 
         # Verify it no longer appears in product listings
         response = self.client.get(self.product_list_url)
@@ -475,7 +475,7 @@ class ProductManagementTests(TestCase):
 
         # Verify product was not deleted
         self.product.refresh_from_db()
-        self.assertEqual(self.product.status, Product.ACTIVE)
+        self.assertEqual(self.product.listing_status, Product.ACTIVE)
 
     def test_delete_product_admin(self):
         """Test that admin can delete any product"""
@@ -488,7 +488,7 @@ class ProductManagementTests(TestCase):
 
         # Verify product was soft-deleted
         self.product.refresh_from_db()
-        self.assertEqual(self.product.status, Product.DISABLED)
+        self.assertEqual(self.product.listing_status, Product.DISABLED)
 
     def test_create_product_validation(self):
         """Test product creation validation"""
